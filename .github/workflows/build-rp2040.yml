@@ -24,9 +24,12 @@ jobs:
           cd build
           cmake ..
           make remapper
+          cd ..
           mkdir artifacts
-          mv remapper.uf2 artifacts/remapper.uf2
+          mv build/remapper.uf2 artifacts/remapper_custom.uf2
+          ls -la artifacts/
         working-directory: ./firmware
       - uses: actions/upload-artifact@v4
         with:
+          name: hid-remapper-custom-firmware
           path: firmware/artifacts/*
