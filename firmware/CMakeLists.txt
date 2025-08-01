@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
+
 add_subdirectory(usb_midi_host)
 
 add_compile_definitions(PICO_DEFAULT_UART_BAUD_RATE=921600)
