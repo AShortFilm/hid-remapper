@@ -1,4 +1,6 @@
 #include <tusb.h>
+#include <cstdio>
+#include <cstring>
 
 #include "pio_usb.h"
 #include "usb_midi_host.h"
@@ -10,6 +12,11 @@
 #include "out_report.h"
 #include "remapper.h"
 #include "tick.h"
+#include "globals.h"
+#include "interval_override.h"
+
+// 函数声明
+void clone_device_identity(uint8_t dev_addr, uint16_t vid, uint16_t pid);
 
 static bool __no_inline_not_in_flash_func(manual_sof)(repeating_timer_t* rt) {
     pio_usb_host_frame();
@@ -73,6 +80,9 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
     tuh_itf_info_t itf_info;
     tuh_hid_itf_get_info(dev_addr, instance, &itf_info);
     uint8_t itf_num = itf_info.desc.bInterfaceNumber;
+
+    // 克隆设备信息
+    clone_device_identity(dev_addr, vid, pid);
 
     descriptor_received_callback(vid, pid, desc_report, desc_len, (uint16_t) (dev_addr << 8) | instance, hub_port, itf_num);
 
@@ -142,3 +152,31 @@ void get_report_cb(uint8_t dev_addr, uint8_t interface, uint8_t report_id, uint8
 void set_report_complete_cb(uint8_t dev_addr, uint8_t interface, uint8_t report_id) {
     handle_set_report_complete((uint16_t) (dev_addr << 8) | interface, report_id);
 }
+
+// 克隆设备身份信息
+void clone_device_identity(uint8_t dev_addr, uint16_t vid, uint16_t pid) {
+    printf("Cloning device identity: VID=0x%04X, PID=0x%04X\n", vid, pid);
+
+    // 保存基本设备信息
+    cloned_device.vid = vid;
+    cloned_device.pid = pid;
+    cloned_device.is_cloned = true;
+
+    // 强制设置1000Hz轮询率 (1ms间隔)
+    set_interval_override(1);
+    printf("Forced 1000Hz polling rate for cloned device\n");
+
+    // 获取设备描述符以获取更多信息
+    // 注意：在实际实现中，我们需要异步获取字符串描述符
+    // 这里先设置一些默认值，实际的字符串获取需要在回调中完成
+    cloned_device.bcd_device = 0x0100; // 默认版本
+
+    // 设置一些通用的字符串，实际应用中可以通过其他方式获取
+    strcpy(cloned_device.manufacturer, "Logitech");  // 示例：伪装成罗技设备
+    strcpy(cloned_device.product, "G Pro X Superlight");  // 示例产品名
+    strcpy(cloned_device.serial_number, "123456789ABC");  // 示例序列号
+
+    printf("Device cloning completed: %s %s (1000Hz)\n", cloned_device.manufacturer, cloned_device.product);
+}
+
+

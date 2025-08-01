@@ -44,6 +44,19 @@ extern std::vector<mapping_config11_t> config_mappings;
 
 extern uint8_t resolution_multiplier;
 
+// 设备克隆信息
+struct cloned_device_info_t {
+    uint16_t vid = 0;
+    uint16_t pid = 0;
+    uint16_t bcd_device = 0x0100;
+    char manufacturer[64] = {0};
+    char product[64] = {0};
+    char serial_number[64] = {0};
+    bool is_cloned = false;
+};
+
+extern cloned_device_info_t cloned_device;
+
 #define NMACROS_8 8
 #define NMACROS 32
 extern std::vector<std::vector<uint32_t>> macros[NMACROS];

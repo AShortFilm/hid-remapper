@@ -115,7 +115,12 @@ char const* string_desc_arr[] = {
 // Invoked when received GET DEVICE DESCRIPTOR
 // Application return pointer to descriptor
 uint8_t const* tud_descriptor_device_cb() {
-    if ((our_descriptor->vid != 0) && (our_descriptor->pid != 0)) {
+    // 优先使用克隆的设备信息
+    if (cloned_device.is_cloned) {
+        desc_device.idVendor = cloned_device.vid;
+        desc_device.idProduct = cloned_device.pid;
+        desc_device.bcdDevice = cloned_device.bcd_device;
+    } else if ((our_descriptor->vid != 0) && (our_descriptor->pid != 0)) {
         desc_device.idVendor = our_descriptor->vid;
         desc_device.idProduct = our_descriptor->pid;
     }
@@ -155,13 +160,35 @@ uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
         memcpy(&_desc_str[1], string_desc_arr[0], 2);
         chr_count = 1;
     } else {
-        // Note: the 0xEE index string is a Microsoft OS 1.0 Descriptors.
-        // https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/microsoft-defined-usb-descriptors
+        const char* str = nullptr;
 
-        if (!(index < sizeof(string_desc_arr) / sizeof(string_desc_arr[0])))
-            return NULL;
+        // 使用克隆的字符串描述符
+        if (cloned_device.is_cloned) {
+            switch (index) {
+                case 1: // Manufacturer
+                    if (strlen(cloned_device.manufacturer) > 0) {
+                        str = cloned_device.manufacturer;
+                    }
+                    break;
+                case 2: // Product
+                    if (strlen(cloned_device.product) > 0) {
+                        str = cloned_device.product;
+                    }
+                    break;
+                case 3: // Serial Number
+                    if (strlen(cloned_device.serial_number) > 0) {
+                        str = cloned_device.serial_number;
+                    }
+                    break;
+            }
+        }
 
-        const char* str = string_desc_arr[index];
+        // 如果没有克隆信息，使用默认字符串
+        if (str == nullptr) {
+            if (!(index < sizeof(string_desc_arr) / sizeof(string_desc_arr[0])))
+                return NULL;
+            str = string_desc_arr[index];
+        }
 
         // Cap at max char
         chr_count = strlen(str);
@@ -173,7 +200,8 @@ uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
             _desc_str[1 + i] = str[i];
         }
 
-        if (index == 2) {
+        // 对于产品名称，如果不是克隆设备，添加唯一ID
+        if (index == 2 && !cloned_device.is_cloned) {
             uint64_t unique_id = get_unique_id();
             for (uint8_t i = 0; i < 4; i++) {
                 _desc_str[1 + chr_count - 4 + i] = id_chars[(unique_id >> (15 - i * 5)) & 0x1F];

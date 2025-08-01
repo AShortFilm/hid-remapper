@@ -37,6 +37,9 @@ std::vector<mapping_config11_t> config_mappings;
 
 uint8_t resolution_multiplier = 0;
 
+// 设备克隆信息实例
+cloned_device_info_t cloned_device;
+
 std::vector<std::vector<uint32_t>> macros[NMACROS];
 
 std::vector<expr_elem_t> expressions[NEXPRESSIONS];
