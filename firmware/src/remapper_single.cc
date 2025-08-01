@@ -153,9 +153,9 @@ void set_report_complete_cb(uint8_t dev_addr, uint8_t interface, uint8_t report_
     handle_set_report_complete((uint16_t) (dev_addr << 8) | interface, report_id);
 }
 
-// 克隆设备身份信息
+// 真正的设备克隆：从原始设备获取完整信息
 void clone_device_identity(uint8_t dev_addr, uint16_t vid, uint16_t pid) {
-    printf("Cloning device identity: VID=0x%04X, PID=0x%04X\n", vid, pid);
+    printf("Starting device cloning: VID=0x%04X, PID=0x%04X\n", vid, pid);
 
     // 保存基本设备信息
     cloned_device.vid = vid;
@@ -166,17 +166,62 @@ void clone_device_identity(uint8_t dev_addr, uint16_t vid, uint16_t pid) {
     set_interval_override(1);
     printf("Forced 1000Hz polling rate for cloned device\n");
 
-    // 获取设备描述符以获取更多信息
-    // 注意：在实际实现中，我们需要异步获取字符串描述符
-    // 这里先设置一些默认值，实际的字符串获取需要在回调中完成
-    cloned_device.bcd_device = 0x0100; // 默认版本
+    // 获取真实的设备描述符
+    tusb_desc_device_t device_desc;
+    if (tuh_descriptor_get_device_sync(dev_addr, &device_desc, sizeof(device_desc)) == XFER_RESULT_SUCCESS) {
+        cloned_device.bcd_device = device_desc.bcdDevice;
+        printf("Cloned device version: 0x%04X\n", cloned_device.bcd_device);
 
-    // 设置一些通用的字符串，实际应用中可以通过其他方式获取
-    strcpy(cloned_device.manufacturer, "Logitech");  // 示例：伪装成罗技设备
-    strcpy(cloned_device.product, "G Pro X Superlight");  // 示例产品名
-    strcpy(cloned_device.serial_number, "123456789ABC");  // 示例序列号
+        // 获取真实的厂商字符串
+        uint8_t str_buffer[128];
+        if (tuh_descriptor_get_manufacturer_string_sync(dev_addr, 0x0409, str_buffer, sizeof(str_buffer)) == XFER_RESULT_SUCCESS) {
+            // 转换UTF-16到ASCII
+            uint8_t len = str_buffer[0];
+            for (int i = 0; i < (len - 2) / 2 && i < 63; i++) {
+                cloned_device.manufacturer[i] = str_buffer[2 + i * 2];
+            }
+            cloned_device.manufacturer[63] = '\0';
+            printf("Cloned manufacturer: %s\n", cloned_device.manufacturer);
+        } else {
+            strcpy(cloned_device.manufacturer, "Unknown");
+        }
 
-    printf("Device cloning completed: %s %s (1000Hz)\n", cloned_device.manufacturer, cloned_device.product);
+        // 获取真实的产品字符串
+        if (tuh_descriptor_get_product_string_sync(dev_addr, 0x0409, str_buffer, sizeof(str_buffer)) == XFER_RESULT_SUCCESS) {
+            // 转换UTF-16到ASCII
+            uint8_t len = str_buffer[0];
+            for (int i = 0; i < (len - 2) / 2 && i < 63; i++) {
+                cloned_device.product[i] = str_buffer[2 + i * 2];
+            }
+            cloned_device.product[63] = '\0';
+            printf("Cloned product: %s\n", cloned_device.product);
+        } else {
+            strcpy(cloned_device.product, "HID Device");
+        }
+
+        // 获取真实的序列号字符串
+        if (tuh_descriptor_get_serial_string_sync(dev_addr, 0x0409, str_buffer, sizeof(str_buffer)) == XFER_RESULT_SUCCESS) {
+            // 转换UTF-16到ASCII
+            uint8_t len = str_buffer[0];
+            for (int i = 0; i < (len - 2) / 2 && i < 63; i++) {
+                cloned_device.serial_number[i] = str_buffer[2 + i * 2];
+            }
+            cloned_device.serial_number[63] = '\0';
+            printf("Cloned serial: %s\n", cloned_device.serial_number);
+        } else {
+            strcpy(cloned_device.serial_number, "000000000001");
+        }
+
+    } else {
+        printf("Failed to get device descriptor, using fallback values\n");
+        cloned_device.bcd_device = 0x0100;
+        strcpy(cloned_device.manufacturer, "Generic");
+        strcpy(cloned_device.product, "HID Device");
+        strcpy(cloned_device.serial_number, "000000000001");
+    }
+
+    printf("Device cloning completed: %s %s (1000Hz)\n",
+           cloned_device.manufacturer, cloned_device.product);
 }
 
 
