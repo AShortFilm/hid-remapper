@@ -6,6 +6,7 @@
 #include "pico/time.h"
 #include "hardware/watchdog.h"
 #include "class/hid/hid.h"
+#include "class/hid/hid_device.h"
 
 // 全局变量
 static char cmd_buffer[CMD_BUFFER_SIZE];
@@ -344,7 +345,7 @@ void execute_command(const command_t* cmd) {
 
 // HID注入函数
 bool inject_key_press(uint8_t keycode, uint8_t modifier) {
-    if (!tud_hid_ready()) {
+    if (!tud_hid_n_ready(0)) {
         return false;
     }
 
@@ -353,20 +354,20 @@ bool inject_key_press(uint8_t keycode, uint8_t modifier) {
         keycode_array[0] = keycode;
     }
 
-    return tud_hid_keyboard_report(1, modifier, keycode_array);
+    return tud_hid_n_keyboard_report(0, 0, modifier, keycode_array);
 }
 
 bool inject_key_release(void) {
-    if (!tud_hid_ready()) {
+    if (!tud_hid_n_ready(0)) {
         return false;
     }
 
     uint8_t keycode_array[6] = {0};
-    return tud_hid_keyboard_report(1, 0, keycode_array);
+    return tud_hid_n_keyboard_report(0, 0, 0, keycode_array);
 }
 
 bool inject_string(const char* str) {
-    if (!str || !tud_hid_ready()) {
+    if (!str || !tud_hid_n_ready(0)) {
         return false;
     }
 
@@ -410,34 +411,34 @@ bool inject_string(const char* str) {
 }
 
 bool inject_mouse_move(int8_t x, int8_t y) {
-    if (!tud_hid_ready()) {
+    if (!tud_hid_n_ready(0)) {
         return false;
     }
 
-    return tud_hid_mouse_report(1, 0, x, y, 0, 0);
+    return tud_hid_n_mouse_report(0, 0, 0, x, y, 0, 0);
 }
 
 bool inject_mouse_click(uint8_t buttons) {
-    if (!tud_hid_ready()) {
+    if (!tud_hid_n_ready(0)) {
         return false;
     }
 
     // 按下
-    if (!tud_hid_mouse_report(1, buttons, 0, 0, 0, 0)) {
+    if (!tud_hid_n_mouse_report(0, 0, buttons, 0, 0, 0, 0)) {
         return false;
     }
     sleep_ms(50);  // 点击持续时间
 
     // 释放
-    return tud_hid_mouse_report(1, 0, 0, 0, 0, 0);
+    return tud_hid_n_mouse_report(0, 0, 0, 0, 0, 0, 0);
 }
 
 bool inject_mouse_wheel(int8_t wheel) {
-    if (!tud_hid_ready()) {
+    if (!tud_hid_n_ready(0)) {
         return false;
     }
 
-    return tud_hid_mouse_report(1, 0, 0, 0, wheel, 0);
+    return tud_hid_n_mouse_report(0, 0, 0, 0, 0, wheel, 0);
 }
 
 // 辅助函数
@@ -480,7 +481,7 @@ void print_status(void) {
     send_response("=== HID Remapper Status ===");
 
     char buffer[128];
-    sprintf(buffer, "HID Ready: %s", tud_hid_ready() ? "Yes" : "No");
+    sprintf(buffer, "HID Ready: %s", tud_hid_n_ready(0) ? "Yes" : "No");
     send_response(buffer);
 
     sprintf(buffer, "UART: %d baud, TX=GP%d, RX=GP%d",
@@ -523,5 +524,5 @@ void serial_hid_control_deinit(void) {
 
 // 检查HID是否就绪
 bool is_hid_ready(void) {
-    return tud_hid_ready();
+    return tud_hid_n_ready(0);
 }
