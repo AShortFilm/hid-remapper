@@ -163,7 +163,7 @@ void clone_device_identity(uint8_t dev_addr, uint16_t vid, uint16_t pid) {
     cloned_device.is_cloned = true;
 
     // 强制设置1000Hz轮询率 (1ms间隔)
-    set_interval_override(1);
+    interval_override = 1;
     printf("Forced 1000Hz polling rate for cloned device\n");
 
     // 获取真实的设备描述符

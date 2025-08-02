@@ -28,6 +28,7 @@
 #include "platform.h"
 #include "remapper.h"
 #include "tick.h"
+#include "serial_control.h"
 
 // RP2350 UF2s wipe the last sector of flash every time
 // because of RP2350-E10 errata mitigation. So we put
@@ -250,6 +251,9 @@ int main() {
     tusb_init();
     stdio_init_all();
 
+    // 初始化串口控制
+    serial_control_init();
+
     tud_sof_isr_set(sof_handler);
 
     next_print = time_us_64() + 1000000;
@@ -280,6 +284,11 @@ int main() {
 #endif
         }
         tud_task();
+
+        // 处理串口控制命令
+        serial_control_task();
+        serial_monitor_task();
+
         if (boot_protocol_updated) {
             parse_our_descriptor();
             boot_protocol_updated = false;
