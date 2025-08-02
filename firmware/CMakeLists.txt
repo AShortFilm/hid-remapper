@@ -46,15 +46,15 @@ add_executable(remapper
     src/ps_auth.cc
     src/app_driver.cc
     src/xbox.cc
-    src/serial_control.cc
+    src/serial_hid_control.cc
 )
 
 if((PICO_BOARD STREQUAL "pico") OR (PICO_BOARD STREQUAL "pico2"))
 target_compile_definitions(remapper PUBLIC PICO_DEFAULT_UART_TX_PIN=12)
 target_compile_definitions(remapper PUBLIC PICO_DEFAULT_UART_RX_PIN=13)
 target_compile_definitions(remapper PUBLIC PICO_DEFAULT_PIO_USB_DP_PIN=14)
-# 启用串口控制功能
-target_compile_definitions(remapper PUBLIC ENABLE_SERIAL_CONTROL=1)
+# 启用串口HID控制功能
+target_compile_definitions(remapper PUBLIC ENABLE_SERIAL_HID_CONTROL=1)
 endif()
 
 target_include_directories(remapper PRIVATE
@@ -109,7 +109,6 @@ add_executable(remapper_dual_a
     src/pico_debug/adi.c
     dual_b_binary.c
     src/ps_auth.cc
-    src/serial_control.cc
     $<$<STREQUAL:${PICO_BOARD},remapper_v7>:src/i2c.cc>
     $<$<STREQUAL:${PICO_BOARD},remapper_v7>:src/mcp4651.cc>
 )
@@ -175,7 +174,6 @@ add_executable(remapper_serial
     src/tick.cc
     src/activity_led.cc
     src/ps_auth.cc
-    src/serial_control.cc
 )
 target_include_directories(remapper_serial PRIVATE
     src

@@ -2013,7 +2013,7 @@ void parse_our_descriptor() {
 }
 
 void print_stats() {
-    // 注释掉调试输出以减少串口干扰
+    // 移除鼠标数据流输出，保持固件干净
     // printf("%lu %lu %lu\n", reports_received, reports_sent, processing_time);
     reports_received = 0;
     reports_sent = 0;

@@ -23,14 +23,16 @@
 #include "descriptor_parser.h"
 #include "globals.h"
 #include "i2c.h"
+
+#ifdef ENABLE_SERIAL_HID_CONTROL
+#include "serial_hid_control.h"
+#endif
 #include "mcp4651.h"
 #include "our_descriptor.h"
 #include "platform.h"
 #include "remapper.h"
 #include "tick.h"
-#ifdef ENABLE_SERIAL_CONTROL
-#include "serial_control.h"
-#endif
+
 
 // RP2350 UF2s wipe the last sector of flash every time
 // because of RP2350-E10 errata mitigation. So we put
@@ -253,10 +255,12 @@ int main() {
     tusb_init();
     stdio_init_all();
 
-    // 初始化串口控制
-#ifdef ENABLE_SERIAL_CONTROL
-    serial_control_init();
+    // 初始化串口HID控制
+#ifdef ENABLE_SERIAL_HID_CONTROL
+    serial_hid_control_init();
 #endif
+
+
 
     tud_sof_isr_set(sof_handler);
 
@@ -289,10 +293,9 @@ int main() {
         }
         tud_task();
 
-        // 处理串口控制命令
-#ifdef ENABLE_SERIAL_CONTROL
-        serial_control_task();
-        serial_monitor_task();
+        // 处理串口HID控制命令
+#ifdef ENABLE_SERIAL_HID_CONTROL
+        serial_hid_control_task();
 #endif
 
         if (boot_protocol_updated) {
