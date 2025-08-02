@@ -11,10 +11,10 @@
 extern "C" {
 #endif
 
-// 配置定义
+// 配置定义 - 独占UART0，对应你的CH340C连接
 #define UART_ID uart0
-#define UART_TX_PIN 13  // Pico TX → CH340C RXD (引脚4)
-#define UART_RX_PIN 12  // Pico RX → CH340C TXD (引脚3)
+#define UART_TX_PIN 12  // Pico TX (GP12) → CH340C RXD (引脚4)
+#define UART_RX_PIN 13  // Pico RX (GP13) → CH340C TXD (引脚3)
 #define UART_BAUD_RATE 115200
 
 #define CMD_BUFFER_SIZE 256

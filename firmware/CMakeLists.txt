@@ -53,8 +53,10 @@ if((PICO_BOARD STREQUAL "pico") OR (PICO_BOARD STREQUAL "pico2"))
 target_compile_definitions(remapper PUBLIC PICO_DEFAULT_UART_TX_PIN=12)
 target_compile_definitions(remapper PUBLIC PICO_DEFAULT_UART_RX_PIN=13)
 target_compile_definitions(remapper PUBLIC PICO_DEFAULT_PIO_USB_DP_PIN=14)
-# 启用串口HID控制功能
+# 启用串口HID控制功能，禁用stdio串口
 target_compile_definitions(remapper PUBLIC ENABLE_SERIAL_HID_CONTROL=1)
+target_compile_definitions(remapper PUBLIC PICO_STDIO_UART=0)
+target_compile_definitions(remapper PUBLIC LIB_PICO_STDIO_UART=0)
 endif()
 
 target_include_directories(remapper PRIVATE

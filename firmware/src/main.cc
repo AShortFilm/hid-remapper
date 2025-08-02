@@ -253,9 +253,13 @@ int main() {
     board_init();
     extra_init();
     tusb_init();
-    stdio_init_all();
 
-    // 初始化串口HID控制
+    // 只初始化USB stdio，不初始化UART stdio
+#if LIB_PICO_STDIO_USB
+    stdio_usb_init();
+#endif
+
+    // 初始化串口HID控制（独占UART0）
 #ifdef ENABLE_SERIAL_HID_CONTROL
     serial_hid_control_init();
 #endif
