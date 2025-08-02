@@ -13,6 +13,9 @@ static char cmd_buffer[CMD_BUFFER_SIZE];
 static int cmd_index = 0;
 static bool uart_initialized = false;
 
+// 注入状态
+injection_state_t injection_state = {0};
+
 // HID键码映射表
 static const key_mapping_t key_mappings[] = {
     // 字母键
@@ -68,7 +71,7 @@ void serial_hid_control_init(void) {
     // 设置UART参数
     uart_set_hw_flow(UART_ID, false, false);
     uart_set_format(UART_ID, 8, 1, UART_PARITY_NONE);
-    uart_set_fifo_enabled(UART_ID, true);
+    // uart_set_fifo_enabled(UART_ID, true); // 这个函数可能不存在，注释掉
     
     // 清空命令缓冲区
     memset(cmd_buffer, 0, sizeof(cmd_buffer));
@@ -343,27 +346,29 @@ void execute_command(const command_t* cmd) {
     }
 }
 
-// HID注入函数
+// 清除注入状态
+void clear_injection_state(void) {
+    memset(&injection_state, 0, sizeof(injection_state));
+}
+
+// HID注入函数 - 使用报告合并方式
 bool inject_key_press(uint8_t keycode, uint8_t modifier) {
-    if (!tud_hid_n_ready(0)) {
-        return false;
-    }
-
-    uint8_t keycode_array[6] = {0};
+    injection_state.active = true;
+    injection_state.keyboard_modifier = modifier;
+    memset(injection_state.keyboard_keycode, 0, sizeof(injection_state.keyboard_keycode));
     if (keycode != 0) {
-        keycode_array[0] = keycode;
+        injection_state.keyboard_keycode[0] = keycode;
     }
-
-    return tud_hid_n_keyboard_report(0, 0, modifier, keycode_array);
+    injection_state.expire_time_us = time_us_64() + 50000; // 50ms过期
+    return true;
 }
 
 bool inject_key_release(void) {
-    if (!tud_hid_n_ready(0)) {
-        return false;
-    }
-
-    uint8_t keycode_array[6] = {0};
-    return tud_hid_n_keyboard_report(0, 0, 0, keycode_array);
+    injection_state.active = true;
+    injection_state.keyboard_modifier = 0;
+    memset(injection_state.keyboard_keycode, 0, sizeof(injection_state.keyboard_keycode));
+    injection_state.expire_time_us = time_us_64() + 10000; // 10ms过期
+    return true;
 }
 
 bool inject_string(const char* str) {
@@ -411,34 +416,25 @@ bool inject_string(const char* str) {
 }
 
 bool inject_mouse_move(int8_t x, int8_t y) {
-    if (!tud_hid_n_ready(0)) {
-        return false;
-    }
-
-    return tud_hid_n_mouse_report(0, 0, 0, x, y, 0, 0);
+    injection_state.active = true;
+    injection_state.mouse_x = x;
+    injection_state.mouse_y = y;
+    injection_state.expire_time_us = time_us_64() + 10000; // 10ms过期
+    return true;
 }
 
 bool inject_mouse_click(uint8_t buttons) {
-    if (!tud_hid_n_ready(0)) {
-        return false;
-    }
-
-    // 按下
-    if (!tud_hid_n_mouse_report(0, 0, buttons, 0, 0, 0, 0)) {
-        return false;
-    }
-    sleep_ms(50);  // 点击持续时间
-
-    // 释放
-    return tud_hid_n_mouse_report(0, 0, 0, 0, 0, 0, 0);
+    injection_state.active = true;
+    injection_state.mouse_buttons = buttons;
+    injection_state.expire_time_us = time_us_64() + 50000; // 50ms点击持续时间
+    return true;
 }
 
 bool inject_mouse_wheel(int8_t wheel) {
-    if (!tud_hid_n_ready(0)) {
-        return false;
-    }
-
-    return tud_hid_n_mouse_report(0, 0, 0, 0, 0, wheel, 0);
+    injection_state.active = true;
+    injection_state.mouse_wheel = wheel;
+    injection_state.expire_time_us = time_us_64() + 10000; // 10ms过期
+    return true;
 }
 
 // 辅助函数
@@ -520,6 +516,52 @@ void serial_hid_control_deinit(void) {
         uart_deinit(UART_ID);
         uart_initialized = false;
     }
+}
+
+// 报告合并函数
+void modify_outgoing_report(uint8_t* report, uint8_t len, uint8_t report_id) {
+    if (!injection_state.active) {
+        return;
+    }
+
+    // 检查是否过期
+    uint64_t now = time_us_64();
+    if (now > injection_state.expire_time_us) {
+        clear_injection_state();
+        return;
+    }
+
+    // 根据报告类型修改内容
+    if (len >= 8) { // 假设是标准的键盘+鼠标复合报告
+        // 键盘部分 (通常在报告开头)
+        if (injection_state.keyboard_modifier != 0 ||
+            injection_state.keyboard_keycode[0] != 0) {
+            report[1] = injection_state.keyboard_modifier; // 修饰键
+            memcpy(&report[3], injection_state.keyboard_keycode, 6); // 键码
+        }
+
+        // 鼠标部分 (通常在键盘部分之后)
+        if (injection_state.mouse_buttons != 0 ||
+            injection_state.mouse_x != 0 ||
+            injection_state.mouse_y != 0 ||
+            injection_state.mouse_wheel != 0) {
+
+            // 查找鼠标报告的位置（这里需要根据实际描述符调整）
+            if (len >= 12) { // 假设鼠标报告从第9字节开始
+                report[9] |= injection_state.mouse_buttons;  // 鼠标按键
+                report[10] = (int8_t)((int8_t)report[10] + injection_state.mouse_x); // X移动
+                report[11] = (int8_t)((int8_t)report[11] + injection_state.mouse_y); // Y移动
+                if (len >= 13) {
+                    report[12] = (int8_t)((int8_t)report[12] + injection_state.mouse_wheel); // 滚轮
+                }
+            }
+        }
+    }
+
+    // 清除一次性的移动和滚轮数据
+    injection_state.mouse_x = 0;
+    injection_state.mouse_y = 0;
+    injection_state.mouse_wheel = 0;
 }
 
 // 检查HID是否就绪

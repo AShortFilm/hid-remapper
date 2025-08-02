@@ -77,7 +77,18 @@ void __no_inline_not_in_flash_func(sof_handler)(uint32_t frame_count) {
 }
 
 bool do_send_report(uint8_t interface, const uint8_t* report_with_id, uint8_t len) {
-    tud_hid_n_report(interface, report_with_id[0], report_with_id + 1, len - 1);
+    // 创建报告副本以便修改
+    uint8_t modified_report[64];
+    memcpy(modified_report, report_with_id, len);
+
+    // 如果是接口0且启用了串口控制，则合并注入数据
+#ifdef ENABLE_SERIAL_HID_CONTROL
+    if (interface == 0) {
+        modify_outgoing_report(modified_report, len, modified_report[0]);
+    }
+#endif
+
+    tud_hid_n_report(interface, modified_report[0], modified_report + 1, len - 1);
     return true;  // XXX?
 }
 

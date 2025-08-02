@@ -68,6 +68,18 @@ void serial_hid_control_deinit(void);
 bool parse_command(const char* input, command_t* cmd);
 void execute_command(const command_t* cmd);
 
+// HID注入状态结构
+typedef struct {
+    bool active;
+    uint8_t keyboard_modifier;
+    uint8_t keyboard_keycode[6];
+    uint8_t mouse_buttons;
+    int8_t mouse_x;
+    int8_t mouse_y;
+    int8_t mouse_wheel;
+    uint64_t expire_time_us;
+} injection_state_t;
+
 // HID注入函数
 bool inject_key_press(uint8_t keycode, uint8_t modifier);
 bool inject_key_release(void);
@@ -75,6 +87,9 @@ bool inject_string(const char* str);
 bool inject_mouse_move(int8_t x, int8_t y);
 bool inject_mouse_click(uint8_t buttons);
 bool inject_mouse_wheel(int8_t wheel);
+
+// 报告合并函数
+void modify_outgoing_report(uint8_t* report, uint8_t len, uint8_t report_id);
 
 // 辅助函数
 uint8_t get_keycode_from_name(const char* key_name);
@@ -87,6 +102,10 @@ void send_error(const char* error_msg);
 bool is_hid_ready(void);
 void print_status(void);
 void print_help(void);
+
+// 注入状态控制
+extern injection_state_t injection_state;
+void clear_injection_state(void);
 
 #ifdef __cplusplus
 }
