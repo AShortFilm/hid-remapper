@@ -78,10 +78,17 @@ void serial_hid_control_init(void) {
     cmd_index = 0;
     uart_initialized = true;
     
-    // 发送欢迎信息
+    // 发送欢迎信息和硬件测试
     send_response("\r\n=== HID Remapper Serial Control ===");
+    send_response("Hardware: CH340C TXD->GP12, RXD->GP13");
     send_response("Ready for commands. Type HELP for available commands.");
     send_response("=====================================");
+
+    // 硬件连接测试
+    char hw_info[128];
+    sprintf(hw_info, "UART Config: TX=GP%d, RX=GP%d, Baud=%d",
+            UART_TX_PIN, UART_RX_PIN, UART_BAUD_RATE);
+    send_response(hw_info);
     send_response("> ");
 }
 
@@ -201,17 +208,23 @@ bool parse_command(const char* input, command_t* cmd) {
 // 发送响应
 void send_response(const char* message) {
     if (uart_initialized && message) {
-        uart_puts(UART_ID, message);
-        uart_puts(UART_ID, "\r\n");
+        // 检查UART是否可写，避免阻塞
+        if (uart_is_writable(UART_ID)) {
+            uart_puts(UART_ID, message);
+            uart_puts(UART_ID, "\r\n");
+        }
     }
 }
 
 // 发送错误信息
 void send_error(const char* error_msg) {
     if (uart_initialized && error_msg) {
-        uart_puts(UART_ID, "ERROR: ");
-        uart_puts(UART_ID, error_msg);
-        uart_puts(UART_ID, "\r\n");
+        // 检查UART是否可写，避免阻塞
+        if (uart_is_writable(UART_ID)) {
+            uart_puts(UART_ID, "ERROR: ");
+            uart_puts(UART_ID, error_msg);
+            uart_puts(UART_ID, "\r\n");
+        }
     }
 }
 
@@ -230,9 +243,10 @@ void execute_command(const command_t* cmd) {
 
                 if (keycode != 0 || modifier != 0) {
                     if (inject_key_press(keycode, modifier)) {
-                        sleep_ms(50);  // 按键持续时间
-                        inject_key_release();
                         send_response("Key pressed");
+                        // 短暂延迟后释放按键
+                        busy_wait_us(50000); // 50ms
+                        inject_key_release();
                     } else {
                         send_error("Failed to send key");
                     }
@@ -351,33 +365,27 @@ void clear_injection_state(void) {
     memset(&injection_state, 0, sizeof(injection_state));
 }
 
-// HID注入函数 - 直接修改转发报告
+// HID注入函数 - 直接发送HID报告
 bool inject_key_press(uint8_t keycode, uint8_t modifier) {
-    injection_state.active = true;
-    injection_state.keyboard_modifier = modifier;
-    memset(injection_state.keyboard_keycode, 0, sizeof(injection_state.keyboard_keycode));
+    if (!tud_hid_n_ready(0)) {
+        return false;
+    }
+
+    uint8_t keycode_array[6] = {0};
     if (keycode != 0) {
-        injection_state.keyboard_keycode[0] = keycode;
-    }
-    injection_state.expire_time_us = time_us_64() + 50000; // 50ms过期
-
-    // 调试信息
-    if (uart_initialized) {
-        char debug_msg[64];
-        sprintf(debug_msg, "[DEBUG] Set KB inject: mod=0x%02X, key=0x%02X\r\n",
-               modifier, keycode);
-        uart_puts(UART_ID, debug_msg);
+        keycode_array[0] = keycode;
     }
 
-    return true;
+    return tud_hid_n_keyboard_report(0, 1, modifier, keycode_array);
 }
 
 bool inject_key_release(void) {
-    injection_state.active = true;
-    injection_state.keyboard_modifier = 0;
-    memset(injection_state.keyboard_keycode, 0, sizeof(injection_state.keyboard_keycode));
-    injection_state.expire_time_us = time_us_64() + 10000; // 10ms过期
-    return true;
+    if (!tud_hid_n_ready(0)) {
+        return false;
+    }
+
+    uint8_t keycode_array[6] = {0};
+    return tud_hid_n_keyboard_report(0, 1, 0, keycode_array);
 }
 
 bool inject_string(const char* str) {
@@ -425,33 +433,29 @@ bool inject_string(const char* str) {
 }
 
 bool inject_mouse_move(int8_t x, int8_t y) {
-    injection_state.active = true;
-    injection_state.mouse_x = x;
-    injection_state.mouse_y = y;
-    injection_state.expire_time_us = time_us_64() + 10000; // 10ms过期
-
-    // 调试信息
-    if (uart_initialized) {
-        char debug_msg[64];
-        sprintf(debug_msg, "[DEBUG] Set Mouse move: x=%d, y=%d\r\n", x, y);
-        uart_puts(UART_ID, debug_msg);
+    if (!tud_hid_n_ready(0)) {
+        return false;
     }
 
-    return true;
+    return tud_hid_n_mouse_report(0, 2, 0, x, y, 0, 0);
 }
 
 bool inject_mouse_click(uint8_t buttons) {
-    injection_state.active = true;
-    injection_state.mouse_buttons = buttons;
-    injection_state.expire_time_us = time_us_64() + 50000; // 50ms点击持续时间
+    if (!tud_hid_n_ready(0)) {
+        return false;
+    }
+
+    // 按下
+    tud_hid_n_mouse_report(0, 2, buttons, 0, 0, 0, 0);
     return true;
 }
 
 bool inject_mouse_wheel(int8_t wheel) {
-    injection_state.active = true;
-    injection_state.mouse_wheel = wheel;
-    injection_state.expire_time_us = time_us_64() + 10000; // 10ms过期
-    return true;
+    if (!tud_hid_n_ready(0)) {
+        return false;
+    }
+
+    return tud_hid_n_mouse_report(0, 2, 0, 0, 0, wheel, 0);
 }
 
 // 辅助函数
@@ -634,13 +638,13 @@ void modify_input_report(uint8_t* report, uint16_t len, uint16_t interface) {
         // report[1] 是保留字节，不修改
         memcpy(&report[2], injection_state.keyboard_keycode, 6); // 键码数组
 
-        // 调试信息
-        if (uart_initialized) {
-            char debug_msg[64];
-            sprintf(debug_msg, "[DEBUG] Modified KB report: mod=0x%02X, key=0x%02X\r\n",
-                   injection_state.keyboard_modifier, injection_state.keyboard_keycode[0]);
-            uart_puts(UART_ID, debug_msg);
-        }
+        // 简化调试信息
+        // if (uart_initialized) {
+        //     char debug_msg[32];
+        //     sprintf(debug_msg, "[KB*] %02X:%02X\r\n",
+        //            injection_state.keyboard_modifier, injection_state.keyboard_keycode[0]);
+        //     uart_puts(UART_ID, debug_msg);
+        // }
     }
 
     // 修改鼠标报告
@@ -658,14 +662,14 @@ void modify_input_report(uint8_t* report, uint16_t len, uint16_t interface) {
             report[3] = (int8_t)((int8_t)report[3] + injection_state.mouse_wheel); // 滚轮
         }
 
-        // 调试信息
-        if (uart_initialized && (injection_state.mouse_x != 0 || injection_state.mouse_y != 0 ||
-                               injection_state.mouse_buttons != 0 || injection_state.mouse_wheel != 0)) {
-            char debug_msg[64];
-            sprintf(debug_msg, "[DEBUG] Modified Mouse report: btn=0x%02X, x=%d, y=%d\r\n",
-                   injection_state.mouse_buttons, injection_state.mouse_x, injection_state.mouse_y);
-            uart_puts(UART_ID, debug_msg);
-        }
+        // 简化调试信息
+        // if (uart_initialized && (injection_state.mouse_x != 0 || injection_state.mouse_y != 0 ||
+        //                        injection_state.mouse_buttons != 0 || injection_state.mouse_wheel != 0)) {
+        //     char debug_msg[32];
+        //     sprintf(debug_msg, "[M*] %02X,%d,%d\r\n",
+        //            injection_state.mouse_buttons, injection_state.mouse_x, injection_state.mouse_y);
+        //     uart_puts(UART_ID, debug_msg);
+        // }
 
         // 清除一次性的移动和滚轮数据
         injection_state.mouse_x = 0;

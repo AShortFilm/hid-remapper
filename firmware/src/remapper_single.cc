@@ -106,16 +106,7 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
 
 void report_received_callback(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
     if (len > 0) {
-        // 创建报告副本以便修改
-        uint8_t modified_report[64];
-        memcpy(modified_report, report, len);
-
-        // 如果启用了串口控制，则修改输入报告
-#ifdef ENABLE_SERIAL_HID_CONTROL
-        modify_input_report(modified_report, len, (uint16_t) (dev_addr << 8) | instance);
-#endif
-
-        handle_received_report(modified_report, len, (uint16_t) (dev_addr << 8) | instance);
+        handle_received_report(report, len, (uint16_t) (dev_addr << 8) | instance);
 
         reports_received = true;
     }
