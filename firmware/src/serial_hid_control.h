@@ -88,8 +88,9 @@ bool inject_mouse_move(int8_t x, int8_t y);
 bool inject_mouse_click(uint8_t buttons);
 bool inject_mouse_wheel(int8_t wheel);
 
-// 报告合并函数
+// 报告修改函数
 void modify_outgoing_report(uint8_t* report, uint8_t len, uint8_t report_id);
+void modify_input_report(uint8_t* report, uint16_t len, uint16_t interface);
 
 // 辅助函数
 uint8_t get_keycode_from_name(const char* key_name);
