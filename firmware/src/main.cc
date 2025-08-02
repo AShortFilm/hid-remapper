@@ -28,7 +28,9 @@
 #include "platform.h"
 #include "remapper.h"
 #include "tick.h"
+#ifdef ENABLE_SERIAL_CONTROL
 #include "serial_control.h"
+#endif
 
 // RP2350 UF2s wipe the last sector of flash every time
 // because of RP2350-E10 errata mitigation. So we put
@@ -252,7 +254,9 @@ int main() {
     stdio_init_all();
 
     // 初始化串口控制
+#ifdef ENABLE_SERIAL_CONTROL
     serial_control_init();
+#endif
 
     tud_sof_isr_set(sof_handler);
 
@@ -286,8 +290,10 @@ int main() {
         tud_task();
 
         // 处理串口控制命令
+#ifdef ENABLE_SERIAL_CONTROL
         serial_control_task();
         serial_monitor_task();
+#endif
 
         if (boot_protocol_updated) {
             parse_our_descriptor();
