@@ -20,6 +20,7 @@ void handle_reset_command();
 void handle_help_command();
 void handle_type_command(const char* text);
 void handle_config_command(const char* params);
+void handle_test_command();
 
 // HID注入函数
 void inject_keyboard_key(uint8_t modifiers, uint8_t keycode);
@@ -71,14 +72,18 @@ void serial_control_task() {
         if (c == '\r' || c == '\n') {
             if (cmd_index > 0) {
                 cmd_buffer[cmd_index] = '\0';
+                uart_puts(UART_ID, "\r\n");  // 发送换行
                 process_text_command(cmd_buffer);
                 cmd_index = 0;
+                // 清空缓冲区
+                memset(cmd_buffer, 0, sizeof(cmd_buffer));
             }
         }
         // 处理退格
         else if (c == '\b' || c == 127) {
             if (cmd_index > 0) {
                 cmd_index--;
+                cmd_buffer[cmd_index] = '\0';  // 清除字符
                 uart_putc(UART_ID, '\b');
                 uart_putc(UART_ID, ' ');
                 uart_putc(UART_ID, '\b');
@@ -125,6 +130,9 @@ void process_text_command(const char* cmd) {
     }
     else if (strncmp(upper_cmd, "CONFIG ", 7) == 0) {
         handle_config_command(upper_cmd + 7);
+    }
+    else if (strncmp(upper_cmd, "TEST", 4) == 0) {
+        handle_test_command();
     }
     else {
         uart_puts(UART_ID, "Unknown command. Type HELP for available commands.\r\n");
@@ -360,8 +368,20 @@ void handle_help_command() {
     uart_puts(UART_ID, "MOUSE MOVE <x> <y>\r\n");
     uart_puts(UART_ID, "MOUSE CLICK LEFT/RIGHT\r\n");
     uart_puts(UART_ID, "CONFIG POLLING <1-8>\r\n");
+    uart_puts(UART_ID, "TEST - Test HID functions\r\n");
     uart_puts(UART_ID, "RESET - Restart\r\n");
     uart_puts(UART_ID, "===============\r\n");
+}
+
+void handle_test_command() {
+    uart_puts(UART_ID, "Testing HID...\r\n");
+
+    if (tud_hid_ready()) {
+        tud_hid_mouse_report(1, 0, 10, 0, 0, 0);
+        uart_puts(UART_ID, "Test OK\r\n");
+    } else {
+        uart_puts(UART_ID, "HID not ready\r\n");
+    }
 }
 
 // HID注入函数实现
@@ -376,14 +396,21 @@ void inject_keyboard_key(uint8_t modifiers, uint8_t keycode) {
 
 void inject_mouse_move(int16_t x, int16_t y) {
     if (tud_hid_ready()) {
-        tud_hid_mouse_report(1, 0, x, y, 0, 0);
+        // 限制移动范围
+        if (x > 127) x = 127;
+        if (x < -127) x = -127;
+        if (y > 127) y = 127;
+        if (y < -127) y = -127;
+
+        tud_hid_mouse_report(1, 0, (int8_t)x, (int8_t)y, 0, 0);
+        sleep_ms(1);
     }
 }
 
 void inject_mouse_click(uint8_t buttons) {
     if (tud_hid_ready()) {
         tud_hid_mouse_report(1, buttons, 0, 0, 0, 0);  // 按下
-        sleep_ms(50);  // 点击持续时间
+        sleep_ms(50);
         tud_hid_mouse_report(1, 0, 0, 0, 0, 0);        // 释放
     }
 }
